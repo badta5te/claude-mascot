@@ -22,6 +22,7 @@ xcrun swiftc \
 
 cp "$SRC/Info.plist" "$APP/Contents/Info.plist"
 cp "$SRC/Resources/"*.png "$RES/"
+[ -f "$SRC/Resources/AppIcon.icns" ] && cp "$SRC/Resources/AppIcon.icns" "$RES/"
 
 codesign --force --sign - "$APP" >/dev/null
 

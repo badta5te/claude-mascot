@@ -2,4 +2,6 @@ build/
 dist/
 tools/node_modules/
 tools/svg/
+tools/AppIcon.iconset/
 .DS_Store
+.claude/settings.local.json

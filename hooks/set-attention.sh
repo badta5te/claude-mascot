@@ -1,25 +1,33 @@
 #!/bin/sh
-# Claude Code Notification hook. Only marks the session as "attention" when
-# Claude is actually blocked on the user (permission / approval prompt).
-# Generic "waiting for input" notifications clear the state file instead.
+# Claude Code Notification hook. Default: assume the notification is
+# something the user needs to act on (permission prompt, blocker) → attention.
+# Only the explicit "waiting for input" idle notification clears state.
+#
+# Every payload is appended to ~/.claude-helper/notifications.log so the
+# matching rules can be tuned to whatever messages Claude Code actually emits.
 set -eu
 
 DIR="$HOME/.claude-helper/sessions"
-mkdir -p "$DIR"
+LOG="$HOME/.claude-helper/notifications.log"
+mkdir -p "$DIR" "$(dirname "$LOG")"
 
 PAYLOAD="$(cat)"
 SID="$(printf '%s' "$PAYLOAD" | jq -r '.session_id // empty')"
 [ -z "$SID" ] && exit 0
 
 MSG="$(printf '%s' "$PAYLOAD" | jq -r '.message // empty')"
+printf '[%s] sid=%s msg=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$SID" "$MSG" >>"$LOG"
 
-case "$MSG" in
-    *permission*|*Permission*|*approve*|*Approve*|*allow*|*Allow*)
+# Lower-case once for case-insensitive matching.
+MSG_LC="$(printf '%s' "$MSG" | tr '[:upper:]' '[:lower:]')"
+
+case "$MSG_LC" in
+    *waiting\ for\ your\ input*|*waiting\ for\ input*|*awaiting\ input*|*idle*)
+        rm -f "$DIR/$SID.state"
+        ;;
+    *)
         TMP="$(mktemp "$DIR/.tmp.XXXXXX")"
         printf 'attention' >"$TMP"
         mv "$TMP" "$DIR/$SID.state"
-        ;;
-    *)
-        rm -f "$DIR/$SID.state"
         ;;
 esac
