@@ -12,7 +12,7 @@ SID="$(jq -r '.session_id // empty')"
 [ -z "$SID" ] && exit 0
 
 STATE_FILE="$DIR/$SID.state"
-ATTENTION_STICKY_SECS=4
+ATTENTION_STICKY_SECS=2
 
 if [ -f "$STATE_FILE" ] && [ "$(cat "$STATE_FILE")" = "attention" ]; then
     AGE=$(( $(date +%s) - $(stat -f %m "$STATE_FILE") ))
