@@ -12,13 +12,14 @@ LOG="$HOME/.claude-helper/notifications.log"
 mkdir -p "$DIR" "$(dirname "$LOG")"
 
 PAYLOAD="$(cat)"
-SID="$(printf '%s' "$PAYLOAD" | jq -r '.session_id // empty')"
+# NOT a real JSON parser — relies on Claude Code's payload shape (no escaped
+# quotes in session_id or message). Avoids depending on jq.
+SID="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
 [ -z "$SID" ] && exit 0
 
-MSG="$(printf '%s' "$PAYLOAD" | jq -r '.message // empty')"
+MSG="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
 printf '[%s] sid=%s msg=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$SID" "$MSG" >>"$LOG"
 
-# Lower-case once for case-insensitive matching.
 MSG_LC="$(printf '%s' "$MSG" | tr '[:upper:]' '[:lower:]')"
 
 case "$MSG_LC" in

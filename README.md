@@ -25,7 +25,7 @@ The artwork is the [`leeorlandi/claude-code-mascot`](https://github.com/leeorlan
 
 ## Build
 
-Requires Xcode command-line tools (`xcrun swiftc`, `codesign`).
+Requires Xcode Command Line Tools (`xcrun swiftc`, `codesign`, `python3`). No third-party deps.
 
 ```sh
 ./build.sh

@@ -8,7 +8,11 @@ set -eu
 DIR="$HOME/.claude-helper/sessions"
 mkdir -p "$DIR"
 
-SID="$(jq -r '.session_id // empty')"
+# Pull session_id out of the JSON Claude Code pipes on stdin. NOT a real JSON
+# parser — relies on Claude Code's payload shape (session_id is a UUID with no
+# escaped quotes). Avoids depending on jq.
+PAYLOAD="$(cat)"
+SID="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
 [ -z "$SID" ] && exit 0
 
 STATE_FILE="$DIR/$SID.state"

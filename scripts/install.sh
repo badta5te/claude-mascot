@@ -8,11 +8,6 @@ SRC_DIR="$REPO_ROOT/hooks"
 DST_DIR="$HOME/.claude-helper/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "error: jq is required (brew install jq)" >&2
-  exit 1
-fi
-
 mkdir -p "$DST_DIR" "$(dirname "$SETTINGS")"
 install -m 0755 "$SRC_DIR/set-working.sh"   "$DST_DIR/set-working.sh"
 install -m 0755 "$SRC_DIR/set-attention.sh" "$DST_DIR/set-attention.sh"
@@ -29,20 +24,27 @@ WORKING_CMD="$DST_DIR/set-working.sh"
 ATTENTION_CMD="$DST_DIR/set-attention.sh"
 CLEAR_CMD="$DST_DIR/clear.sh"
 
-# Add a single hook command for an event, but only if no existing entry
-# already runs the same command. Other hooks for the same event are kept.
+# Idempotently add a hook entry to settings.json. We use Python (built into
+# macOS) so the installer has zero brew/dep requirements.
 ensure_hook() {
   event="$1"
   cmd="$2"
   TMP="$(mktemp)"
-  jq --arg ev "$event" --arg cmd "$cmd" '
-    .hooks //= {}
-    | .hooks[$ev] //= []
-    | if (.hooks[$ev] | map(.hooks // []) | flatten | map(.command) | index($cmd))
-      then .
-      else .hooks[$ev] += [{ "hooks": [{ "type": "command", "command": $cmd }] }]
-      end
-  ' "$SETTINGS" >"$TMP" && mv "$TMP" "$SETTINGS"
+  /usr/bin/env python3 - "$SETTINGS" "$event" "$cmd" >"$TMP" <<'PY'
+import json, sys
+path, event, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(path) as f: data = json.load(f)
+except Exception:
+    data = {}
+hooks = data.setdefault("hooks", {})
+entries = hooks.setdefault(event, [])
+existing = {h.get("command") for entry in entries for h in entry.get("hooks", [])}
+if cmd not in existing:
+    entries.append({"hooks": [{"type": "command", "command": cmd}]})
+json.dump(data, sys.stdout, indent=2)
+PY
+  mv "$TMP" "$SETTINGS"
 }
 
 ensure_hook UserPromptSubmit "$WORKING_CMD"

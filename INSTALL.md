@@ -4,7 +4,8 @@
 
 - macOS 11 (Big Sur) or later
 - [Claude Code](https://claude.com/claude-code) already installed and used at least once (so `~/.claude/` exists)
-- `jq` — install via Homebrew if you don't have it: `brew install jq`
+
+No additional packages — the installer and hook scripts only use tools that ship with macOS (`/bin/sh`, `python3` via Xcode Command Line Tools, `sed`).
 
 ## Install (5 steps)
 
@@ -56,4 +57,4 @@ rm -rf /Applications/ClaudeMascot.app
 
 - **App won't open ("damaged" or "cannot verify developer")** — you skipped step 3. Run the `xattr` command and try again.
 - **Mascot stays gray during a turn** — that session was running before `install.sh`. Quit and restart Claude Code.
-- **`install.sh` errors that `jq` is missing** — run `brew install jq` (or install jq some other way) and re-run.
+- **`install.sh` errors that `python3` is missing** — run `xcode-select --install` to get the Xcode Command Line Tools.
