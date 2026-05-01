@@ -12,7 +12,7 @@ final class MascotController: NSObject {
     private let statusItem: NSStatusItem
     private let animations: [State: Animation]
     private let statusMenuItem = NSMenuItem(title: "Status: idle", action: nil, keyEquivalent: "")
-    private var currentState: State = .idle
+    private var currentState: State?
     private var index = 0
     private var timer: Timer?
 
@@ -30,7 +30,8 @@ final class MascotController: NSObject {
 
     func apply(_ state: State) {
         guard state != currentState else { return }
-        Self.log.info("apply \(self.currentState.rawValue, privacy: .public) -> \(state.rawValue, privacy: .public)")
+        let from = currentState?.rawValue ?? "init"
+        Self.log.info("apply \(from, privacy: .public) -> \(state.rawValue, privacy: .public)")
         currentState = state
         statusMenuItem.title = "Status: \(state.rawValue)"
         statusItem.button?.toolTip = "Claude: \(state.rawValue)"
@@ -39,14 +40,14 @@ final class MascotController: NSObject {
     }
 
     private func renderFrame() {
-        guard let anim = animations[currentState] else { return }
+        guard let state = currentState, let anim = animations[state] else { return }
         statusItem.button?.image = anim.frames[index % anim.frames.count]
     }
 
     private func restartTimer() {
         timer?.invalidate()
         index = 0
-        guard let anim = animations[currentState] else { return }
+        guard let state = currentState, let anim = animations[state] else { return }
         timer = Timer.scheduledTimer(withTimeInterval: anim.interval, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.index += 1
