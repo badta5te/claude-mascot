@@ -57,6 +57,32 @@ final class StateWatcher {
             sawAny = true
             if parsed > worst { worst = parsed }
         }
-        onChange(sawAny ? worst : .idle)
+        let result: State = sawAny ? worst : .idle
+        Self.log("scan -> \(result.rawValue) (files=\(names.filter { $0.hasSuffix(".state") }.count))")
+        onChange(result)
     }
+
+    static func log(_ msg: String) {
+        let logURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude-helper/watcher.log")
+        let line = "[\(Self.iso.string(from: Date()))] \(msg)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: logURL) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+            try? handle.close()
+        } else {
+            try? FileManager.default.createDirectory(
+                at: logURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try? data.write(to: logURL)
+        }
+    }
+
+    static let iso: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
 }

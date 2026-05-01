@@ -27,6 +27,7 @@ final class MascotController: NSObject {
 
     func apply(_ state: State) {
         let changed = state != currentState
+        if changed { StateWatcher.log("apply \(currentState.rawValue) -> \(state.rawValue)") }
         currentState = state
         statusMenuItem.title = "Status: \(state.rawValue)"
         if changed { restartTimer() }
