@@ -81,13 +81,28 @@ final class StateWatcher {
         }
     }
 
+    // Per-state staleness cutoffs.
+    //   working:   bumped on every PreToolUse/PostToolUse — but a long-running
+    //              tool call (docker build, big test run) can pause hooks for
+    //              30+ min, so the cutoff has to comfortably cover the slowest
+    //              tool calls we tolerate.
+    //   attention: written once when Claude is blocked on a permission prompt;
+    //              no further hooks fire until the user responds. The user may
+    //              be away for hours — we must NOT time the orange out, or the
+    //              mascot becomes useless for its highest-value state. 24h is
+    //              effectively immortal in practice; orphan attention files
+    //              from killed sessions are rare and harmless (menu can clear).
+    private static func cutoff(for state: State) -> Date {
+        switch state {
+        case .working:   return Date().addingTimeInterval(-30 * 60)
+        case .attention: return Date().addingTimeInterval(-24 * 3600)
+        case .idle:      return Date.distantPast
+        }
+    }
+
     private func scan() {
         let fm = FileManager.default
         let names = (try? fm.contentsOfDirectory(atPath: dirURL.path)) ?? []
-        // Active turns rewrite the .state file on every PreToolUse/PostToolUse
-        // hook, so a file untouched for >5 minutes is almost certainly an orphan
-        // from a session that was killed without firing the Stop hook.
-        let cutoff = Date().addingTimeInterval(-5 * 60)
         var worst: State = .idle
         var sawAny = false
         var stateFileCount = 0
@@ -97,9 +112,9 @@ final class StateWatcher {
             guard
                 let attrs = try? fm.attributesOfItem(atPath: url.path),
                 let mtime = attrs[.modificationDate] as? Date,
-                mtime > cutoff,
                 let raw = try? String(contentsOf: url, encoding: .utf8),
-                let parsed = State(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines))
+                let parsed = State(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+                mtime > Self.cutoff(for: parsed)
             else { continue }
             sawAny = true
             if parsed > worst { worst = parsed }
