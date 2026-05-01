@@ -14,21 +14,11 @@ Artwork: [`leeorlandi/claude-code-mascot`](https://github.com/leeorlandi/claude-
 
 ## Install
 
-Grab the latest release from [Releases](https://github.com/badta5te/claude-mascot/releases/latest), then follow `INSTALL.md` inside the tarball. The first install runs a one-time `scripts/install.sh` to wire up Claude Code hooks; **for subsequent updates you just replace `ClaudeMascot.app` in `/Applications` — the hooks stay where they are.**
+Grab the latest release from [Releases](https://github.com/badta5te/claude-mascot/releases/latest), unpack the tarball, drag `ClaudeMascot.app` into `/Applications`, run `xattr -dr com.apple.quarantine /Applications/ClaudeMascot.app`, then launch it. On first launch the app asks to wire up Claude Code hooks — click **Wire up hooks** and you're done. Full step-by-step in `INSTALL.md` inside the tarball.
+
+Updates are drag-and-replace: the app re-syncs hooks from its bundle on every launch, so dropping a new `.app` into `/Applications` is the entire upgrade procedure.
 
 Requirements: macOS 11+ and the Xcode Command Line Tools (`xcode-select --install`). No Homebrew packages.
-
-## Updating
-
-```sh
-# Download the new release tarball, unpack, then:
-pkill -x ClaudeMascot                                   # stop the running copy
-xattr -dr com.apple.quarantine ClaudeMascot.app          # clear Gatekeeper flag
-mv ClaudeMascot.app /Applications/                       # overwrite
-open /Applications/ClaudeMascot.app
-```
-
-The hooks in `~/.claude-helper/hooks/` are unchanged across most releases. If a release's notes mention a hook change, re-run `./scripts/install.sh` from the new tarball; it's idempotent.
 
 ## Build from source
 
@@ -58,11 +48,12 @@ To produce a release archive (`dist/ClaudeMascot-<version>.tar.gz`):
 ## How it works
 
 - The app is `LSUIElement` (no Dock icon, no menu bar) — just an `NSStatusItem`.
-- A `DispatchSource` watches `~/.claude-helper/sessions/`. Hook scripts atomically write `<session-id>.state` files containing `working` / `attention`, or delete them on `Stop`. The app aggregates worst-state across files.
-- Hook → state-file mapping (set up by `scripts/install.sh`):
+- A `DispatchSource` watches `~/.claude-helper/sessions/`. Hook scripts atomically write `<session-id>.state` files containing `working` / `attention`, or delete them on `Stop`. The app aggregates worst-state across files (with a 5-min staleness cutoff so orphans from killed sessions self-clear).
+- Hook → state-file mapping (set up at first launch by `Installer.swift`):
   - `UserPromptSubmit`, `PreToolUse`, `PostToolUse` → `set-working.sh`
   - `Notification` → `set-attention.sh`
   - `Stop` → `clear.sh`
+- Hook scripts ship inside `ClaudeMascot.app/Contents/Resources/hooks/` and are copied to `~/.claude-helper/hooks/` on every launch, so updating the app updates the hooks.
 
 `SubagentStop` is intentionally not wired — the parent session is still in a turn.
 
@@ -71,22 +62,27 @@ To produce a release archive (`dist/ClaudeMascot-<version>.tar.gz`):
 ```
 .
 ├── ClaudeMascot/             Swift sources, Info.plist, PNG/icns resources
-├── hooks/                    Claude Code hook scripts (set-working / set-attention / clear)
-├── scripts/install.sh        First-time hook installer (merges ~/.claude/settings.json)
+├── hooks/                    Hook scripts (set-working / set-attention / clear) — bundled into the .app
+├── scripts/uninstall.sh      Power-user rescue uninstall (the in-app menu does the same thing)
 ├── tools/render-frames.mjs   PNG frame renderer
 ├── tools/render-icon.mjs     AppIcon.icns builder
-├── build.sh                  swiftc → ClaudeMascot.app
-├── package.sh                build + bundle into a release tarball
-└── INSTALL.md                end-user install guide (shipped inside the tarball)
+├── build.sh                  swiftc → ClaudeMascot.app (universal binary, hooks bundled)
+└── package.sh                build + bundle into a release tarball
 ```
 
 ## Uninstall
 
-```sh
-./scripts/uninstall.sh
-```
+Click the mascot → **Uninstall Claude Mascot…**, confirm, then drag `/Applications/ClaudeMascot.app` to the Trash.
 
-Surgical: removes only Claude Mascot's hook entries from `~/.claude/settings.json` (other entries are kept), deletes `~/.claude-helper/`, removes `/Applications/ClaudeMascot.app`. Your Claude Code conversation history, caches, project-local `.claude/` dirs, etc. are untouched.
+This removes only Claude Mascot's hook entries from `~/.claude/settings.json` (other entries are kept), deletes `~/.claude-helper/`, and quits the app. Conversation history, caches, project-local `.claude/` dirs, etc. are untouched.
+
+If the app won't launch (e.g. unsigned-build issues), `scripts/uninstall.sh` in this repo does the same thing from the shell.
+
+## Logs
+
+```sh
+log stream --predicate 'subsystem == "app.claude-mascot"' --info --debug
+```
 
 ## Limitations
 

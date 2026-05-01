@@ -19,9 +19,9 @@ final class MascotController: NSObject {
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         animations = [
-            .idle:      Animation(frames: Self.cycle("idle"),      interval: 1.5),
-            .working:   Animation(frames: Self.cycle("working"),   interval: 0.8),
-            .attention: Animation(frames: Self.cycle("attention"), interval: 0.22),
+            .idle:      Animation(frames: Self.cycle("idle"),      interval: 2.5),
+            .working:   Animation(frames: Self.cycle("working"),   interval: 1.2),
+            .attention: Animation(frames: Self.cycle("attention"), interval: 0.5),
         ]
         super.init()
         buildMenu()
@@ -60,13 +60,10 @@ final class MascotController: NSObject {
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
         menu.addItem(.separator())
-        let openItem = menu.addItem(
-            withTitle: "Open ~/.claude-helper",
-            action: #selector(openHelperDir(_:)),
-            keyEquivalent: ""
-        )
-        openItem.target = self
+        addItem(menu, "Open ~/.claude-helper", #selector(openHelperDir(_:)))
+        addItem(menu, "Wire up Claude Code hooks…", #selector(wireUpHooks(_:)))
         menu.addItem(.separator())
+        addItem(menu, "Uninstall Claude Mascot…", #selector(uninstall(_:)))
         menu.addItem(
             withTitle: "Quit Claude Mascot",
             action: #selector(NSApplication.terminate(_:)),
@@ -75,11 +72,24 @@ final class MascotController: NSObject {
         statusItem.menu = menu
     }
 
+    private func addItem(_ menu: NSMenu, _ title: String, _ action: Selector) {
+        let item = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
+        item.target = self
+    }
+
     @objc private func openHelperDir(_ sender: Any?) {
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude-helper")
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         NSWorkspace.shared.open(url)
+    }
+
+    @objc private func wireUpHooks(_ sender: Any?) {
+        Installer.wireUpHooksFromMenu()
+    }
+
+    @objc private func uninstall(_ sender: Any?) {
+        Installer.uninstallFromMenu()
     }
 
     private static func cycle(_ state: String) -> [NSImage] {

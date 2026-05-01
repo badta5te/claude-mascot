@@ -30,6 +30,11 @@ cp "$SRC/Info.plist" "$APP/Contents/Info.plist"
 cp "$SRC/Resources/"*.png "$RES/"
 [ -f "$SRC/Resources/AppIcon.icns" ] && cp "$SRC/Resources/AppIcon.icns" "$RES/"
 
+# Hook scripts ship inside the app — the app installs them on first launch.
+mkdir -p "$RES/hooks"
+cp "$REPO/hooks/"*.sh "$RES/hooks/"
+chmod 0755 "$RES/hooks/"*.sh
+
 codesign --force --sign - "$APP" >/dev/null
 
 echo "built $APP"

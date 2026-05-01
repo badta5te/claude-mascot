@@ -14,8 +14,6 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
 cp -R "$REPO/build/ClaudeMascot.app" "$STAGE/"
-cp -R "$REPO/hooks"                  "$STAGE/"
-cp -R "$REPO/scripts"                "$STAGE/"
 cp    "$REPO/INSTALL.md"             "$STAGE/"
 
 ARCHIVE="$DIST/ClaudeMascot-$VERSION.tar.gz"

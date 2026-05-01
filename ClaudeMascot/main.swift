@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let mascot = MascotController()
+        Installer.installIfNeeded()
         let watcher = StateWatcher { state in mascot.apply(state) }
         watcher.start()
         self.mascot = mascot

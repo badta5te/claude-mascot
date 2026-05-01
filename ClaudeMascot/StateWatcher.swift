@@ -10,6 +10,7 @@ final class StateWatcher {
     private var fd: Int32 = -1
     private var lastState: State?
     private var reattachAttempts = 0
+    private var stalenessTimer: Timer?
 
     init(onChange: @escaping (State) -> Void) {
         self.dirURL = FileManager.default.homeDirectoryForCurrentUser
@@ -21,9 +22,17 @@ final class StateWatcher {
         ensureDir()
         scan()
         attach()
+        // Catches state files that age past the staleness cutoff with no fs
+        // events to wake the DispatchSource (e.g. a killed session leaves a
+        // "working" file untouched — without this poll the mascot would stay
+        // green until the next unrelated fs event).
+        stalenessTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.scan()
+        }
     }
 
     deinit {
+        stalenessTimer?.invalidate()
         source?.cancel()
     }
 
@@ -75,7 +84,10 @@ final class StateWatcher {
     private func scan() {
         let fm = FileManager.default
         let names = (try? fm.contentsOfDirectory(atPath: dirURL.path)) ?? []
-        let cutoff = Date().addingTimeInterval(-12 * 3600)
+        // Active turns rewrite the .state file on every PreToolUse/PostToolUse
+        // hook, so a file untouched for >5 minutes is almost certainly an orphan
+        // from a session that was killed without firing the Stop hook.
+        let cutoff = Date().addingTimeInterval(-5 * 60)
         var worst: State = .idle
         var sawAny = false
         var stateFileCount = 0
