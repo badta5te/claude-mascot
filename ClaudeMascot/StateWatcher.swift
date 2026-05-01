@@ -81,22 +81,18 @@ final class StateWatcher {
         }
     }
 
-    // Per-state staleness cutoffs.
-    //   working:   bumped on every PreToolUse/PostToolUse — but a long-running
-    //              tool call (docker build, big test run) can pause hooks for
-    //              30+ min, so the cutoff has to comfortably cover the slowest
-    //              tool calls we tolerate.
-    //   attention: written once when Claude is blocked on a permission prompt;
-    //              no further hooks fire until the user responds. The user may
-    //              be away for hours — we must NOT time the orange out, or the
-    //              mascot becomes useless for its highest-value state. 24h is
-    //              effectively immortal in practice; orphan attention files
-    //              from killed sessions are rare and harmless (menu can clear).
+    // Staleness cutoff is 24h for any non-idle state. The cutoff exists only
+    // to clear orphans from sessions force-killed without firing Stop — those
+    // are rare. Anything shorter misfires during normal use: a long tool call
+    // (docker build, ML training, big test run) pauses hooks for hours, and an
+    // unresponded permission prompt fires Notification only once. With a short
+    // cutoff the mascot wrongly drops state mid-build / silently times out the
+    // orange while the user is away from desk. 24h means orphans persist until
+    // the next day; the menu's Uninstall (or a manual rm) clears them sooner.
     private static func cutoff(for state: State) -> Date {
         switch state {
-        case .working:   return Date().addingTimeInterval(-30 * 60)
-        case .attention: return Date().addingTimeInterval(-24 * 3600)
-        case .idle:      return Date.distantPast
+        case .working, .attention: return Date().addingTimeInterval(-24 * 3600)
+        case .idle:                return Date.distantPast
         }
     }
 
