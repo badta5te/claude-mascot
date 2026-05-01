@@ -1,77 +1,97 @@
 # Claude Mascot
 
-A tiny native macOS menubar app that shows what your Claude Code session is doing.
+A tiny native macOS menu-bar app that mirrors what your Claude Code session is doing.
 
-| State | Trigger | Look |
-|---|---|---|
-| **idle** | no active turn | gray, slow blink |
-| **working** | a turn is in progress (`UserPromptSubmit`/`PreToolUse`/`PostToolUse`) | green, active wave |
-| **attention** | Claude is waiting on you (`Notification`) | orange, urgent wave |
+| State | Color | Animation | When |
+|---|---|---|---|
+| idle | gray | slow blink | between turns / no active session |
+| working | green | floats up & down | a turn is in progress |
+| attention | orange | fast blink | Claude is blocked on a permission prompt |
 
 If multiple Claude Code sessions are running, the mascot reflects the worst state across all of them (`attention > working > idle`).
 
-The artwork is the [`leeorlandi/claude-code-mascot`](https://github.com/leeorlandi/claude-code-mascot) pixel-art SVG, recolored per state and rendered to PNGs.
+Artwork: [`leeorlandi/claude-code-mascot`](https://github.com/leeorlandi/claude-code-mascot) — pixel-art SVG recolored per state and rendered to PNGs.
 
-## Layout
+## Install
 
-```
-.
-├── ClaudeMascot/         # Swift sources, Info.plist, PNG resources
-├── hooks/                # Claude Code hook scripts
-├── scripts/install.sh    # installs hooks + merges ~/.claude/settings.json
-├── tools/render-frames.mjs  # one-time PNG renderer (Node)
-└── build.sh              # swiftc → ClaudeMascot.app
-```
+Grab the latest release from [Releases](https://github.com/badta5te/claude-mascot/releases/latest), then follow `INSTALL.md` inside the tarball. The first install runs a one-time `scripts/install.sh` to wire up Claude Code hooks; **for subsequent updates you just replace `ClaudeMascot.app` in `/Applications` — the hooks stay where they are.**
 
-## Build
+Requirements: macOS 11+ and the Xcode Command Line Tools (`xcode-select --install`). No Homebrew packages.
 
-Requires Xcode Command Line Tools (`xcrun swiftc`, `codesign`, `python3`). No third-party deps.
+## Updating
 
 ```sh
-./build.sh
+# Download the new release tarball, unpack, then:
+pkill -x ClaudeMascot                                   # stop the running copy
+xattr -dr com.apple.quarantine ClaudeMascot.app          # clear Gatekeeper flag
+mv ClaudeMascot.app /Applications/                       # overwrite
+open /Applications/ClaudeMascot.app
+```
+
+The hooks in `~/.claude-helper/hooks/` are unchanged across most releases. If a release's notes mention a hook change, re-run `./scripts/install.sh` from the new tarball; it's idempotent.
+
+## Build from source
+
+```sh
+./build.sh                          # swiftc + ad-hoc codesign → build/ClaudeMascot.app
 open build/ClaudeMascot.app
 ```
 
-The app uses `LSUIElement = YES` (no Dock icon, no menu bar). Click the mascot in the status bar for the menu.
-
-To re-render the PNG frames (only needed if you change colors or the upstream SVGs):
+To re-render the PNG frames (only if you tweak colors or the upstream SVGs):
 
 ```sh
 cd tools && npm install && node render-frames.mjs
 ```
 
-## Install hooks
+To rebuild the app icon:
 
 ```sh
-./scripts/install.sh
+node tools/render-icon.mjs
 ```
 
-This:
+To produce a release archive (`dist/ClaudeMascot-<version>.tar.gz`):
 
-1. Copies `hooks/*.sh` into `~/.claude-helper/hooks/`.
-2. Backs up `~/.claude/settings.json` to `settings.json.bak.<timestamp>`.
-3. Adds (idempotently) one hook entry per event:
-   - `UserPromptSubmit`, `PreToolUse`, `PostToolUse` → `set-working.sh`
-   - `Notification` → `set-attention.sh`
-   - `Stop` → `clear.sh`
+```sh
+./package.sh
+```
 
-`SubagentStop` is **not** wired — the parent session is still in a turn.
+## How it works
 
-State is communicated via files in `~/.claude-helper/sessions/<session-id>.state`. Each hook does an atomic `mktemp` + `mv`; the app watches the directory with a `DispatchSource`.
+- The app is `LSUIElement` (no Dock icon, no menu bar) — just an `NSStatusItem`.
+- A `DispatchSource` watches `~/.claude-helper/sessions/`. Hook scripts atomically write `<session-id>.state` files containing `working` / `attention`, or delete them on `Stop`. The app aggregates worst-state across files.
+- Hook → state-file mapping (set up by `scripts/install.sh`):
+  - `UserPromptSubmit`, `PreToolUse`, `PostToolUse` → `set-working.sh`
+  - `Notification` → `set-attention.sh`
+  - `Stop` → `clear.sh`
+
+`SubagentStop` is intentionally not wired — the parent session is still in a turn.
+
+## Layout
+
+```
+.
+├── ClaudeMascot/             Swift sources, Info.plist, PNG/icns resources
+├── hooks/                    Claude Code hook scripts (set-working / set-attention / clear)
+├── scripts/install.sh        First-time hook installer (merges ~/.claude/settings.json)
+├── tools/render-frames.mjs   PNG frame renderer
+├── tools/render-icon.mjs     AppIcon.icns builder
+├── build.sh                  swiftc → ClaudeMascot.app
+├── package.sh                build + bundle into a release tarball
+└── INSTALL.md                end-user install guide (shipped inside the tarball)
+```
 
 ## Uninstall
 
 ```sh
-# Remove hooks from settings.json
-mv ~/.claude/settings.json.bak.<timestamp> ~/.claude/settings.json
-# Remove helper dir
-rm -rf ~/.claude-helper
-# Quit the app via the menubar, or:
 pkill -x ClaudeMascot
+ls ~/.claude/settings.json.bak.*                              # find the most-recent backup
+mv ~/.claude/settings.json.bak.<timestamp> ~/.claude/settings.json
+rm -rf ~/.claude-helper
+rm -rf /Applications/ClaudeMascot.app
 ```
 
-## Limitations / not yet shipped
+## Limitations
 
 - No login-item autostart (use `SMAppService` later).
-- No popover with active-session details — just a simple menu.
-- Notarization / distribution is out of scope; the build is ad-hoc signed for local use.
+- Just a simple `NSMenu` — no popover with active-session details.
+- Ad-hoc signed; not notarized. Recipients clear quarantine with `xattr -dr com.apple.quarantine`.
