@@ -83,12 +83,10 @@ To produce a release archive (`dist/ClaudeMascot-<version>.tar.gz`):
 ## Uninstall
 
 ```sh
-pkill -x ClaudeMascot
-ls ~/.claude/settings.json.bak.*                              # find the most-recent backup
-mv ~/.claude/settings.json.bak.<timestamp> ~/.claude/settings.json
-rm -rf ~/.claude-helper
-rm -rf /Applications/ClaudeMascot.app
+./scripts/uninstall.sh
 ```
+
+Surgical: removes only Claude Mascot's hook entries from `~/.claude/settings.json` (other entries are kept), deletes `~/.claude-helper/`, removes `/Applications/ClaudeMascot.app`. Your Claude Code conversation history, caches, project-local `.claude/` dirs, etc. are untouched.
 
 ## Limitations
 

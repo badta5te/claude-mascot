@@ -40,18 +40,13 @@ Re-run steps 1–3 with the new release. Hooks already installed don't need re-i
 
 ## Uninstalling
 
+From the unpacked release folder:
+
 ```sh
-# Quit the app
-pkill -x ClaudeMascot
-
-# Restore the previous Claude Code settings (pick the most recent backup)
-ls ~/.claude/settings.json.bak.*
-mv ~/.claude/settings.json.bak.<timestamp> ~/.claude/settings.json
-
-# Remove the helper dir and the app
-rm -rf ~/.claude-helper
-rm -rf /Applications/ClaudeMascot.app
+./scripts/uninstall.sh
 ```
+
+This is **surgical**: it removes only Claude Mascot's hook entries from `~/.claude/settings.json` (any other hooks or settings you added are kept), deletes `~/.claude-helper/`, and removes `/Applications/ClaudeMascot.app`. Your Claude Code conversation history, file history, caches, and project-local `.claude/` dirs are not touched.
 
 ## Troubleshooting
 
