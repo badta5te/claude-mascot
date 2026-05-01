@@ -24,34 +24,32 @@ WORKING_CMD="$DST_DIR/set-working.sh"
 ATTENTION_CMD="$DST_DIR/set-attention.sh"
 CLEAR_CMD="$DST_DIR/clear.sh"
 
-# Idempotently add a hook entry to settings.json. We use Python (built into
-# macOS) so the installer has zero brew/dep requirements.
-ensure_hook() {
-  event="$1"
-  cmd="$2"
-  TMP="$(mktemp)"
-  /usr/bin/env python3 - "$SETTINGS" "$event" "$cmd" >"$TMP" <<'PY'
+# Idempotently merge all hook entries into settings.json in a single pass.
+# Python is used because it ships with macOS (via Xcode CLT) — zero brew/dep cost.
+TMP="$(mktemp)"
+/usr/bin/env python3 - "$SETTINGS" "$WORKING_CMD" "$ATTENTION_CMD" "$CLEAR_CMD" >"$TMP" <<'PY'
 import json, sys
-path, event, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
+path, working, attention, clear = sys.argv[1:5]
 try:
     with open(path) as f: data = json.load(f)
 except Exception:
     data = {}
 hooks = data.setdefault("hooks", {})
-entries = hooks.setdefault(event, [])
-existing = {h.get("command") for entry in entries for h in entry.get("hooks", [])}
-if cmd not in existing:
-    entries.append({"hooks": [{"type": "command", "command": cmd}]})
+mapping = [
+    ("UserPromptSubmit", working),
+    ("PreToolUse",       working),
+    ("PostToolUse",      working),
+    ("Notification",     attention),
+    ("Stop",             clear),
+]
+for event, cmd in mapping:
+    entries = hooks.setdefault(event, [])
+    existing = {h.get("command") for entry in entries for h in entry.get("hooks", [])}
+    if cmd not in existing:
+        entries.append({"hooks": [{"type": "command", "command": cmd}]})
 json.dump(data, sys.stdout, indent=2)
 PY
-  mv "$TMP" "$SETTINGS"
-}
-
-ensure_hook UserPromptSubmit "$WORKING_CMD"
-ensure_hook PreToolUse       "$WORKING_CMD"
-ensure_hook PostToolUse      "$WORKING_CMD"
-ensure_hook Notification     "$ATTENTION_CMD"
-ensure_hook Stop             "$CLEAR_CMD"
+mv "$TMP" "$SETTINGS"
 
 echo "merged hook entries → $SETTINGS"
 echo "done."

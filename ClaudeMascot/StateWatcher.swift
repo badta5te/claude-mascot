@@ -1,19 +1,24 @@
 import Foundation
+import os
 
 final class StateWatcher {
+    static let log = Logger(subsystem: "app.claude-mascot", category: "watcher")
+
     private let dirURL: URL
     private let onChange: (State) -> Void
     private var source: DispatchSourceFileSystemObject?
     private var fd: Int32 = -1
+    private var lastState: State?
+    private var reattachAttempts = 0
 
     init(onChange: @escaping (State) -> Void) {
         self.dirURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude-helper/sessions")
         self.onChange = onChange
-        try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
     }
 
     func start() {
+        ensureDir()
         scan()
         attach()
     }
@@ -22,21 +27,49 @@ final class StateWatcher {
         source?.cancel()
     }
 
+    private func ensureDir() {
+        try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+    }
+
     private func attach() {
+        ensureDir()
         fd = open(dirURL.path, O_EVTONLY)
         guard fd >= 0 else {
-            NSLog("StateWatcher: open(%@) failed: %d", dirURL.path, errno)
+            Self.log.error("open(\(self.dirURL.path, privacy: .public)) failed: \(errno)")
+            scheduleReattach()
             return
         }
+        reattachAttempts = 0
         let s = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: [.write, .delete, .rename],
             queue: .main
         )
-        s.setEventHandler { [weak self] in self?.scan() }
+        s.setEventHandler { [weak self] in
+            guard let self else { return }
+            // .delete/.rename invalidate the descriptor — re-attach to a fresh dir.
+            let events = self.source?.data ?? []
+            if events.contains(.delete) || events.contains(.rename) {
+                Self.log.info("watched dir went away, re-attaching")
+                self.source?.cancel()
+                self.source = nil
+                self.scheduleReattach()
+                return
+            }
+            self.scan()
+        }
         s.setCancelHandler { [fd] in close(fd) }
         s.resume()
         source = s
+    }
+
+    private func scheduleReattach() {
+        reattachAttempts += 1
+        let delay = min(pow(2.0, Double(reattachAttempts)), 30.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.attach()
+            self?.scan()
+        }
     }
 
     private func scan() {
@@ -45,7 +78,9 @@ final class StateWatcher {
         let cutoff = Date().addingTimeInterval(-12 * 3600)
         var worst: State = .idle
         var sawAny = false
+        var stateFileCount = 0
         for name in names where name.hasSuffix(".state") {
+            stateFileCount += 1
             let url = dirURL.appendingPathComponent(name)
             guard
                 let attrs = try? fm.attributesOfItem(atPath: url.path),
@@ -58,31 +93,9 @@ final class StateWatcher {
             if parsed > worst { worst = parsed }
         }
         let result: State = sawAny ? worst : .idle
-        Self.log("scan -> \(result.rawValue) (files=\(names.filter { $0.hasSuffix(".state") }.count))")
+        guard result != lastState else { return }
+        lastState = result
+        Self.log.debug("scan -> \(result.rawValue, privacy: .public) (files=\(stateFileCount))")
         onChange(result)
     }
-
-    static func log(_ msg: String) {
-        let logURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude-helper/watcher.log")
-        let line = "[\(Self.iso.string(from: Date()))] \(msg)\n"
-        guard let data = line.data(using: .utf8) else { return }
-        if let handle = try? FileHandle(forWritingTo: logURL) {
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-            try? handle.close()
-        } else {
-            try? FileManager.default.createDirectory(
-                at: logURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try? data.write(to: logURL)
-        }
-    }
-
-    static let iso: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
 }

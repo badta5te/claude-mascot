@@ -1,10 +1,13 @@
 import AppKit
+import os
 
 final class MascotController: NSObject {
     private struct Animation {
         let frames: [NSImage]
         let interval: TimeInterval
     }
+
+    private static let log = Logger(subsystem: "app.claude-mascot", category: "mascot")
 
     private let statusItem: NSStatusItem
     private let animations: [State: Animation]
@@ -26,11 +29,12 @@ final class MascotController: NSObject {
     }
 
     func apply(_ state: State) {
-        let changed = state != currentState
-        if changed { StateWatcher.log("apply \(currentState.rawValue) -> \(state.rawValue)") }
+        guard state != currentState else { return }
+        Self.log.info("apply \(self.currentState.rawValue, privacy: .public) -> \(state.rawValue, privacy: .public)")
         currentState = state
         statusMenuItem.title = "Status: \(state.rawValue)"
-        if changed { restartTimer() }
+        statusItem.button?.toolTip = "Claude: \(state.rawValue)"
+        restartTimer()
         renderFrame()
     }
 
@@ -85,6 +89,8 @@ final class MascotController: NSObject {
         if let img = NSImage(named: name) { return img }
         let resources = Bundle.main.resourceURL ?? URL(fileURLWithPath: ".")
         let url = resources.appendingPathComponent("\(name).png")
-        return NSImage(contentsOf: url) ?? NSImage(size: NSSize(width: 22, height: 22))
+        if let img = NSImage(contentsOf: url) { return img }
+        log.error("missing image asset: \(name, privacy: .public)")
+        return NSImage(size: NSSize(width: 22, height: 22))
     }
 }

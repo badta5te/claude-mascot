@@ -13,12 +13,18 @@ EXE="$MACOS/ClaudeMascot"
 rm -rf "$BUILD"
 mkdir -p "$MACOS" "$RES"
 
-xcrun swiftc \
-  -O \
-  -target "$(uname -m)-apple-macos11.0" \
-  -framework AppKit \
-  -o "$EXE" \
-  "$SRC"/*.swift
+# Universal binary: build each slice, then lipo.
+mkdir -p "$BUILD/slices"
+for ARCH in arm64 x86_64; do
+  xcrun swiftc \
+    -O \
+    -target "$ARCH-apple-macos11.0" \
+    -framework AppKit \
+    -o "$BUILD/slices/ClaudeMascot-$ARCH" \
+    "$SRC"/*.swift
+done
+lipo -create -output "$EXE" "$BUILD/slices/ClaudeMascot-arm64" "$BUILD/slices/ClaudeMascot-x86_64"
+rm -rf "$BUILD/slices"
 
 cp "$SRC/Info.plist" "$APP/Contents/Info.plist"
 cp "$SRC/Resources/"*.png "$RES/"
